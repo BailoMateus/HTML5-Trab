@@ -6,8 +6,8 @@ O jogador deve sobreviver ao maior número de ondas de inimigos possível, acumu
 
 ## Nome dos integrantes
 
-- [Seu Nome]
-- [Nome da sua Dupla]
+- Mateus Luiz Bailo
+- Icaro Thiago Nunes
 
 ## Instruções de como usar
 
