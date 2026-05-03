@@ -1,0 +1,26 @@
+/* ===================================================
+   style.css — Reset básico e centralização do canvas
+   =================================================== */
+
+/* Remove margens e padding padrão do navegador */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Fundo escuro para a página inteira */
+body {
+  background-color: #111;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Garante que o canvas do p5.js fique centralizado */
+canvas {
+  display: block;
+}
