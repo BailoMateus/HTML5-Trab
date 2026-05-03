@@ -44,3 +44,5 @@ HTML5-Trab/
 ├── sketch.js    → Toda a lógica do jogo
 └── README.md    → Este arquivo
 ```
+
+(Comentarios dentro do codigo feitos com IA generativa)
