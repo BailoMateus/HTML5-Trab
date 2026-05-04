@@ -4,22 +4,28 @@
 // ============================================================
 
 // --- Variável de estado que controla qual tela está ativa ---
-// 0 = Início, 1 = Instruções, 2 = Jogo, 3 = Game Over
+// 0 = Início, 1 = Instruções, 2 = Jogo, 3 = Game Over, 4 = Powerups
 let gameState = 0;
 
 // --- Objetos e listas principais do jogo ---
 let player;               // Instância do jogador
 let enemies = [];          // Lista de inimigos ativos
+let bosses = [];           // Lista de bosses ativos
 let projectiles = [];      // Lista de projéteis ativos
 let particles = [];        // Lista de partículas visuais
 let score = 0;             // Pontuação atual
 let gameTimer = 0;         // Contador de frames desde o início da partida
 let spawnInterval = 60;    // Intervalo (em frames) para gerar inimigos
-let shootInterval = 25;    // Intervalo (em frames) para atirar
+let shootInterval = 25;    // Intervalo (em frames) para atirar (depreciado, usaremos player.fireRate)
 let lastShot = 0;          // Frame do último disparo
 let lastSpawn = 0;         // Frame do último spawn
 let cameraX = 0;           // Deslocamento X da câmera
 let cameraY = 0;           // Deslocamento Y da câmera
+
+// Variáveis para sistema de Boss e Powerups
+let nextBossScore = 500;
+let bossMessageTimer = 0;
+let availablePowerups = [];
 
 // ============================================================
 // CLASSE PLAYER — Representa o personagem controlado pelo jogador
@@ -33,6 +39,8 @@ class Player {
     this.maxHealth = 100;    // Vida máxima
     this.health = 100;       // Vida atual
     this.invincibleTimer = 0;// Frames restantes de invencibilidade após levar dano
+    this.baseDamage = 1;     // Dano base dos tiros
+    this.fireRate = 25;      // Cooldown dos tiros em frames
   }
 
   // Atualiza posição com base nas teclas pressionadas (WASD ou Setas)
@@ -94,15 +102,31 @@ class Player {
 // CLASSE ENEMY — Representa um inimigo que persegue o jogador
 // ============================================================
 class Enemy {
-  constructor(x, y, tier) {
+  constructor(x, y, tier, type) {
     this.x = x;
     this.y = y;
     this.tier = tier || 1;           // Nível do inimigo (afeta vida e tamanho)
-    this.size = 18 + this.tier * 4;  // Tamanho baseado no tier
-    this.speed = 1.2 + random(-0.3, 0.3); // Velocidade com variação aleatória
-    this.maxHealth = 2 + this.tier;  // Vida máxima
+    this.type = type || 'normal';    // 'normal', 'fast', 'tank'
+    
+    // Configura atributos baseados no tipo
+    if (this.type === 'fast') {
+      this.size = 14 + this.tier * 2;
+      this.speed = 2.2 + random(-0.2, 0.2);
+      this.maxHealth = 1 + this.tier;
+      this.damage = 5 + this.tier;
+    } else if (this.type === 'tank') {
+      this.size = 24 + this.tier * 6;
+      this.speed = 0.7 + random(-0.1, 0.1);
+      this.maxHealth = 6 + this.tier * 3;
+      this.damage = 12 + this.tier * 3;
+    } else {
+      this.size = 18 + this.tier * 4;
+      this.speed = 1.2 + random(-0.3, 0.3);
+      this.maxHealth = 2 + this.tier;
+      this.damage = 8 + this.tier * 2;
+    }
+    
     this.health = this.maxHealth;
-    this.damage = 8 + this.tier * 2; // Dano causado ao jogador
     this.flashTimer = 0;             // Timer para efeito de flash ao ser atingido
   }
 
@@ -125,24 +149,73 @@ class Enemy {
     return this.health <= 0;
   }
 
-  // Desenha o inimigo na tela — quadrado vermelho
+  // Desenha o inimigo na tela de acordo com seu tipo
   draw() {
     push();
     rectMode(CENTER);
     noStroke();
-    // Brilho sutil ao redor
-    fill(255, 60, 60, 30);
-    rect(this.x, this.y, this.size * 1.8, this.size * 1.8, 4);
-    // Corpo — branco se levou dano recentemente, vermelho normalmente
-    if (this.flashTimer > 0) {
-      fill(255, 255, 255);
+    
+    // Cores padrão baseadas no tipo
+    let glowColor, mainColor, strokeCol;
+    
+    if (this.type === 'fast') {
+      glowColor = color(255, 255, 60, 30);
+      mainColor = color(220, 220, 50);
+      strokeCol = color(255, 255, 100);
+    } else if (this.type === 'tank') {
+      glowColor = color(200, 60, 255, 30);
+      mainColor = color(160, 50, 220);
+      strokeCol = color(220, 100, 255);
     } else {
-      fill(220, 50, 50);
+      glowColor = color(255, 60, 60, 30);
+      mainColor = color(220, 50, 50);
+      strokeCol = color(255, 100, 100);
     }
-    stroke(255, 100, 100);
-    strokeWeight(1.5);
-    rect(this.x, this.y, this.size, this.size, 3);
-    // Barra de vida do inimigo (só aparece se não estiver com vida cheia)
+    
+    if (this.flashTimer > 0) {
+      mainColor = color(255, 255, 255);
+    }
+
+    push();
+    translate(this.x, this.y);
+    
+    if (this.type === 'fast') {
+      // Desenha um triângulo que aponta para o jogador
+      let angle = atan2(player.y - this.y, player.x - this.x);
+      rotate(angle);
+      
+      fill(glowColor);
+      triangle(this.size, 0, -this.size, -this.size*0.8, -this.size, this.size*0.8);
+      
+      fill(mainColor);
+      stroke(strokeCol);
+      strokeWeight(1.5);
+      triangle(this.size*0.8, 0, -this.size*0.8, -this.size*0.6, -this.size*0.8, this.size*0.6);
+      
+    } else if (this.type === 'tank') {
+      // Desenha um losango
+      rotate(PI / 4);
+      fill(glowColor);
+      rect(0, 0, this.size * 1.8, this.size * 1.8, 4);
+      
+      fill(mainColor);
+      stroke(strokeCol);
+      strokeWeight(1.5);
+      rect(0, 0, this.size, this.size, 3);
+      
+    } else {
+      // Quadrado normal
+      fill(glowColor);
+      rect(0, 0, this.size * 1.8, this.size * 1.8, 4);
+      
+      fill(mainColor);
+      stroke(strokeCol);
+      strokeWeight(1.5);
+      rect(0, 0, this.size, this.size, 3);
+    }
+    pop();
+
+    // Barra de vida
     if (this.health < this.maxHealth) {
       noStroke();
       let barW = this.size;
@@ -159,6 +232,85 @@ class Enemy {
 }
 
 // ============================================================
+// CLASSE BOSS — Chefe gigantesco e resistente
+// ============================================================
+class Boss {
+  constructor(x, y, tier) {
+    this.x = x;
+    this.y = y;
+    this.tier = tier || 1;
+    this.size = 80 + this.tier * 10;
+    this.speed = 0.8 + (this.tier * 0.1);
+    this.maxHealth = 150 + this.tier * 100;
+    this.health = this.maxHealth;
+    this.damage = 25 + this.tier * 5;
+    this.flashTimer = 0;
+  }
+
+  update() {
+    let dx = player.x - this.x;
+    let dy = player.y - this.y;
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 0) {
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+    }
+    if (this.flashTimer > 0) this.flashTimer--;
+  }
+
+  takeDamage(amount) {
+    this.health -= amount;
+    this.flashTimer = 6;
+    return this.health <= 0;
+  }
+
+  draw() {
+    push();
+    rectMode(CENTER);
+    
+    let glowColor = color(255, 150, 50, 40);
+    let mainColor = color(220, 100, 20);
+    let strokeCol = color(255, 200, 100);
+    
+    if (this.flashTimer > 0) {
+      mainColor = color(255, 255, 255);
+    }
+
+    push();
+    translate(this.x, this.y);
+    let pulse = sin(frameCount * 0.1) * 10;
+    
+    // Hexágono (ou estrela pulsante)
+    rotate(frameCount * 0.01);
+    
+    fill(glowColor);
+    noStroke();
+    circle(0, 0, this.size * 1.5 + pulse * 2);
+    
+    fill(mainColor);
+    stroke(strokeCol);
+    strokeWeight(3);
+    
+    // Desenha um octógono
+    beginShape();
+    for (let i = 0; i < 8; i++) {
+      let angle = TWO_PI / 8 * i;
+      let vx = cos(angle) * (this.size/2 + pulse);
+      let vy = sin(angle) * (this.size/2 + pulse);
+      vertex(vx, vy);
+    }
+    endShape(CLOSE);
+    
+    // Detalhe central
+    fill(0, 0, 0, 100);
+    circle(0, 0, this.size * 0.4);
+    
+    pop();
+    pop();
+  }
+}
+
+// ============================================================
 // CLASSE PROJECTILE — Projéteis disparados automaticamente
 // ============================================================
 class Projectile {
@@ -167,7 +319,7 @@ class Projectile {
     this.y = y;
     this.size = 8;
     this.speed = 7;
-    this.damage = 1;
+    this.damage = player.baseDamage;
     this.life = 90; // Frames de vida restantes antes de desaparecer
     // Calcula direção normalizada para o alvo
     let dx = targetX - x;
@@ -259,6 +411,8 @@ function draw() {
     runGame();
   } else if (gameState === 3) {
     drawGameOverScreen();
+  } else if (gameState === 4) {
+    drawPowerupScreen();
   }
 }
 
@@ -314,17 +468,17 @@ function drawInstructionsScreen() {
   let instructions = [
     'Use WASD ou Setas para mover o personagem.',
     '',
-    'Inimigos (quadrados vermelhos) surgem continuamente',
-    'e perseguem você. Não deixe que te toquem!',
+    'Inimigos de várias formas surgem continuamente:',
+    'Rápidos (Amarelo) e Tanques (Roxo) aparecem com o tempo.',
+    '',
+    'A cada 500 pontos, um BOSS (Dourado) surge.',
+    'Derrote o Boss para escolher um POWERUP de status!',
     '',
     'Seu personagem ataca automaticamente,',
-    'disparando projéteis no inimigo mais próximo.',
+    'disparando projéteis no alvo mais próximo.',
     '',
-    'Cada inimigo derrotado dá pontos.',
     'Se sua vida chegar a 0, é Game Over!',
-    '',
-    'A dificuldade aumenta gradualmente com o tempo.',
-    'Tente sobreviver o máximo possível!'
+    'Sobreviva o máximo que puder!'
   ];
 
   // Percorre cada linha de instrução e exibe na tela
@@ -391,6 +545,7 @@ function runGame() {
   shootAtClosestEnemy();   // Dispara projéteis automaticamente
   updateProjectiles();     // Atualiza e desenha projéteis
   updateEnemies();         // Atualiza e desenha inimigos
+  updateBosses();          // Atualiza e desenha bosses
   updateParticles();       // Atualiza e desenha partículas
   checkEnemyPlayerCollisions(); // Verifica colisões inimigo-jogador
   player.draw();           // Desenha o jogador
@@ -398,6 +553,20 @@ function runGame() {
   pop();
 
   drawHUD(); // Desenha interface (vida, pontuação, tempo)
+  
+  // Mensagem do Boss
+  if (bossMessageTimer > 0) {
+    push();
+    textAlign(CENTER, CENTER);
+    let pulse = sin(frameCount * 0.2) * 5;
+    textSize(32 + pulse);
+    fill(255, 100, 100);
+    stroke(0);
+    strokeWeight(4);
+    text('UM BOSS FOI SUMMONADO!', width / 2, height / 4);
+    pop();
+    bossMessageTimer--;
+  }
 }
 
 // ============================================================
@@ -409,6 +578,26 @@ function spawnEnemies() {
   // Escalona dificuldade: reduz intervalo de spawn ao longo do tempo
   let difficulty = Math.floor(gameTimer / 600); // Aumenta a cada 10 segundos
   let currentSpawnInterval = max(15, spawnInterval - difficulty * 3);
+
+  // Lógica de spawn do Boss
+  if (score >= nextBossScore) {
+    let angle = random(TWO_PI);
+    let dist = random(450, 600);
+    let ex = player.x + cos(angle) * dist;
+    let ey = player.y + sin(angle) * dist;
+    
+    // Tier aumenta a cada boss
+    let tier = Math.floor(nextBossScore / 500); 
+    bosses.push(new Boss(ex, ey, tier));
+    
+    nextBossScore += 500;
+    bossMessageTimer = 180; // 3 segundos de mensagem
+  }
+
+  // Pausar spawn de inimigos se tiver boss e score < 1500
+  if (bosses.length > 0 && score < 1500) {
+    return;
+  }
 
   if (frameCount - lastSpawn >= currentSpawnInterval) {
     lastSpawn = frameCount;
@@ -424,27 +613,39 @@ function spawnEnemies() {
 
       // Tier do inimigo aumenta gradualmente
       let tier = 1;
-      if (difficulty > 5) tier = random() < 0.3 ? 2 : 1;
-      if (difficulty > 12) tier = random() < 0.2 ? 3 : (random() < 0.4 ? 2 : 1);
+      let type = 'normal';
+      
+      if (difficulty > 5) {
+        tier = random() < 0.3 ? 2 : 1;
+        if (random() < 0.2) type = 'fast';
+      }
+      if (difficulty > 12) {
+        tier = random() < 0.2 ? 3 : (random() < 0.4 ? 2 : 1);
+        if (random() < 0.3) type = 'tank';
+        else if (random() < 0.3) type = 'fast';
+      }
 
-      enemies.push(new Enemy(ex, ey, tier));
+      enemies.push(new Enemy(ex, ey, tier, type));
     }
   }
 }
 
 // Dispara um projétil em direção ao inimigo mais próximo
 function shootAtClosestEnemy() {
-  if (frameCount - lastShot < shootInterval) return; // Respeita cooldown
-  if (enemies.length === 0) return; // Sem inimigos, não atira
+  if (frameCount - lastShot < player.fireRate) return; // Respeita cooldown (usando player.fireRate)
+  
+  // Agrupa bosses e enemies para encontrar o mais próximo
+  let allTargets = enemies.concat(bosses);
+  if (allTargets.length === 0) return; // Sem alvos
 
-  // Encontra o inimigo mais próximo do jogador
+  // Encontra o alvo mais próximo do jogador
   let closest = null;
   let closestDist = Infinity;
-  for (let i = 0; i < enemies.length; i++) {
-    let d = dist(player.x, player.y, enemies[i].x, enemies[i].y);
+  for (let i = 0; i < allTargets.length; i++) {
+    let d = dist(player.x, player.y, allTargets[i].x, allTargets[i].y);
     if (d < closestDist) {
       closestDist = d;
-      closest = enemies[i];
+      closest = allTargets[i];
     }
   }
 
@@ -455,7 +656,7 @@ function shootAtClosestEnemy() {
   }
 }
 
-// Atualiza e desenha todos os projéteis; verifica colisão com inimigos
+// Atualiza e desenha todos os projéteis; verifica colisão com inimigos e bosses
 function updateProjectiles() {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     let p = projectiles[i];
@@ -467,23 +668,46 @@ function updateProjectiles() {
       continue;
     }
 
-    // Verifica colisão com cada inimigo
     let hit = false;
-    for (let j = enemies.length - 1; j >= 0; j--) {
-      let e = enemies[j];
-      let d = dist(p.x, p.y, e.x, e.y);
-      if (d < (p.size + e.size) / 2) {
+    
+    // Verifica colisão com bosses primeiro (tamanho maior)
+    for (let j = bosses.length - 1; j >= 0; j--) {
+      let b = bosses[j];
+      let d = dist(p.x, p.y, b.x, b.y);
+      if (d < (p.size + b.size) / 2) {
         hit = true;
-        let killed = e.takeDamage(p.damage);
+        let killed = b.takeDamage(p.damage);
         if (killed) {
-          // Gera partículas de explosão ao destruir inimigo
-          spawnDeathParticles(e.x, e.y);
-          score += 10 * e.tier;
-          enemies.splice(j, 1);
+          spawnDeathParticles(b.x, b.y);
+          spawnDeathParticles(b.x + 20, b.y - 20); // Mais partículas pro Boss
+          score += 150 * b.tier; // Mais pontos
+          bosses.splice(j, 1);
+          // Prepara a tela de powerups
+          setupPowerups();
+          gameState = 4; 
         }
-        break; // Um projétil atinge apenas um inimigo
+        break;
       }
     }
+    
+    // Verifica colisão com inimigos normais
+    if (!hit) {
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        let e = enemies[j];
+        let d = dist(p.x, p.y, e.x, e.y);
+        if (d < (p.size + e.size) / 2) {
+          hit = true;
+          let killed = e.takeDamage(p.damage);
+          if (killed) {
+            spawnDeathParticles(e.x, e.y);
+            score += 10 * e.tier;
+            enemies.splice(j, 1);
+          }
+          break; // Um projétil atinge apenas um inimigo
+        }
+      }
+    }
+
     if (hit) {
       projectiles.splice(i, 1);
     } else {
@@ -500,6 +724,14 @@ function updateEnemies() {
   }
 }
 
+// Atualiza e desenha todos os bosses ativos
+function updateBosses() {
+  for (let i = 0; i < bosses.length; i++) {
+    bosses[i].update();
+    bosses[i].draw();
+  }
+}
+
 // Verifica colisão entre inimigos e o jogador
 function checkEnemyPlayerCollisions() {
   for (let i = 0; i < enemies.length; i++) {
@@ -507,6 +739,13 @@ function checkEnemyPlayerCollisions() {
     let d = dist(player.x, player.y, e.x, e.y);
     if (d < (player.size + e.size) / 2) {
       player.takeDamage(e.damage);
+    }
+  }
+  for (let i = 0; i < bosses.length; i++) {
+    let b = bosses[i];
+    let d = dist(player.x, player.y, b.x, b.y);
+    if (d < (player.size + b.size) / 2) {
+      player.takeDamage(b.damage);
     }
   }
 }
@@ -619,10 +858,92 @@ function drawWorldBackground() {
 }
 
 // ============================================================
+// TELA 4 — SELEÇÃO DE POWERUP
+// ============================================================
+function setupPowerups() {
+  // Lista de possíveis powerups
+  let allPowerups = [
+    { title: "Vida Máxima", desc: "+20 Max HP", apply: () => { player.maxHealth += 20; player.health += 20; } },
+    { title: "Velocidade", desc: "+1 Speed", apply: () => { player.speed += 1; } },
+    { title: "Mais Dano", desc: "+1 Dano", apply: () => { player.baseDamage += 1; } },
+    { title: "Tiro Rápido", desc: "Reduz recarga", apply: () => { player.fireRate = max(5, player.fireRate - 5); } }
+  ];
+  
+  // Seleciona 3 aleatórios
+  availablePowerups = [];
+  while (availablePowerups.length < 3) {
+    let p = random(allPowerups);
+    if (!availablePowerups.includes(p)) {
+      availablePowerups.push(p);
+    }
+  }
+}
+
+function drawPowerupScreen() {
+  // Desenha o fundo e o jogador parecendo pausado
+  drawWorldBackground();
+  push();
+  translate(-cameraX, -cameraY);
+  player.draw();
+  pop();
+  
+  // Fundo translúcido
+  push();
+  fill(0, 0, 0, 200);
+  rectMode(CORNER);
+  rect(0, 0, width, height);
+  
+  textAlign(CENTER, CENTER);
+  textSize(36);
+  fill(255, 255, 100);
+  text("BOSS DERROTADO!", width / 2, 100);
+  
+  textSize(24);
+  fill(200, 200, 200);
+  text("Escolha um Powerup (Pressione 1, 2 ou 3):", width / 2, 150);
+  
+  // Desenha os 3 botões/caixas
+  for (let i = 0; i < 3; i++) {
+    let boxW = 200;
+    let boxH = 150;
+    let boxX = width / 2 - boxW * 1.5 + i * (boxW + 20) + 10;
+    let boxY = 250;
+    
+    // Caixa
+    fill(40, 40, 60);
+    stroke(100, 100, 150);
+    strokeWeight(2);
+    rectMode(CORNER);
+    rect(boxX, boxY, boxW, boxH, 10);
+    
+    // Texto Número
+    fill(255);
+    noStroke();
+    textSize(20);
+    text("[" + (i + 1) + "]", boxX + boxW / 2, boxY + 25);
+    
+    // Título
+    fill(100, 255, 100);
+    textSize(22);
+    text(availablePowerups[i].title, boxX + boxW / 2, boxY + 70);
+    
+    // Descrição
+    fill(180);
+    textSize(16);
+    text(availablePowerups[i].desc, boxX + boxW / 2, boxY + 110);
+  }
+  pop();
+}
+
+// ============================================================
 // CONTROLE DE TECLADO — Transição entre telas
 // ============================================================
 function keyPressed() {
-  if (keyCode === ENTER) {
+  if (gameState === 4) {
+    if (key === '1') { availablePowerups[0].apply(); gameState = 2; }
+    if (key === '2') { availablePowerups[1].apply(); gameState = 2; }
+    if (key === '3') { availablePowerups[2].apply(); gameState = 2; }
+  } else if (keyCode === ENTER) {
     if (gameState === 0 || gameState === 1) {
       // Inicia o jogo: reseta todas as variáveis
       resetGame();
@@ -644,6 +965,7 @@ function keyPressed() {
 function resetGame() {
   player = new Player();
   enemies = [];
+  bosses = [];
   projectiles = [];
   particles = [];
   score = 0;
@@ -652,4 +974,6 @@ function resetGame() {
   lastSpawn = 0;
   cameraX = 0;
   cameraY = 0;
+  nextBossScore = 500;
+  bossMessageTimer = 0;
 }
