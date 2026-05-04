@@ -43,6 +43,7 @@ class Player {
     this.baseDamage = 1;     // Dano base dos tiros
     this.fireRate = 25;      // Cooldown dos tiros em frames
     this.piercing = 0;       // Quantos inimigos o tiro atravessa antes de sumir
+    this.multiShot = 1;      // Quantidade de tiros disparados de uma vez
   }
 
   // Atualiza posição com base nas teclas pressionadas (WASD ou Setas)
@@ -668,7 +669,24 @@ function shootAtClosestEnemy() {
 
   // Só atira se o inimigo estiver dentro do alcance visual
   if (closest && closestDist < 500) {
-    projectiles.push(new Projectile(player.x, player.y, closest.x, closest.y));
+    let baseAngle = atan2(closest.y - player.y, closest.x - player.x);
+    
+    for (let i = 0; i < player.multiShot; i++) {
+      let angleOffset = 0;
+      if (player.multiShot > 1) {
+        let spreadArc = PI / 4; // 45 graus de spread total
+        let step = spreadArc / (player.multiShot - 1);
+        angleOffset = -spreadArc / 2 + step * i;
+      }
+      
+      let finalAngle = baseAngle + angleOffset;
+      // Define alvos virtuais para que os projéteis calculem sua própria velocidade baseados neles
+      let targetX = player.x + cos(finalAngle) * 100;
+      let targetY = player.y + sin(finalAngle) * 100;
+      
+      projectiles.push(new Projectile(player.x, player.y, targetX, targetY));
+    }
+    
     lastShot = frameCount;
   }
 }
@@ -918,7 +936,8 @@ function setupPowerups() {
     { title: "Velocidade", desc: "+1 Speed", apply: () => { player.speed += 1; } },
     { title: "Mais Dano", desc: "+1 Dano", apply: () => { player.baseDamage += 1; } },
     { title: "Tiro Rápido", desc: "Reduz recarga", apply: () => { player.fireRate = max(5, player.fireRate - 5); } },
-    { title: "Penetrante", desc: "+1 Alvo atingido", apply: () => { player.piercing += 1; } }
+    { title: "Penetrante", desc: "+1 Alvo atingido", apply: () => { player.piercing += 1; } },
+    { title: "Multi-Tiro", desc: "+1 Projétil extra", apply: () => { player.multiShot += 1; } }
   ];
   
   // Seleciona 3 aleatórios
