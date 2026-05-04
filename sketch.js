@@ -468,8 +468,8 @@ function drawInstructionsScreen() {
   let instructions = [
     'Use WASD ou Setas para mover o personagem.',
     '',
-    'Inimigos de várias formas surgem continuamente:',
-    'Rápidos (Amarelo) e Tanques (Roxo) aparecem com o tempo.',
+    'Inimigos (quadrados vermelhos) surgem continuamente.',
+    'Rápidos (Amarelos) e Tanques (Roxos) aparecem com o tempo.',
     '',
     'A cada 500 pontos, um BOSS (Dourado) surge.',
     'Derrote o Boss para escolher um POWERUP de status!',
@@ -594,9 +594,13 @@ function spawnEnemies() {
     bossMessageTimer = 180; // 3 segundos de mensagem
   }
 
-  // Pausar spawn de inimigos se tiver boss e score < 1500
-  if (bosses.length > 0 && score < 1500) {
-    return;
+  // Pausar spawn de inimigos normais enquanto existir um boss
+  if (bosses.length > 0) {
+    if (score < 3000) {
+      return; // Pausa completamente
+    } else {
+      currentSpawnInterval *= 3; // Reduz drasticamente o spawn
+    }
   }
 
   if (frameCount - lastSpawn >= currentSpawnInterval) {
@@ -615,14 +619,16 @@ function spawnEnemies() {
       let tier = 1;
       let type = 'normal';
       
-      if (difficulty > 5) {
-        tier = random() < 0.3 ? 2 : 1;
-        if (random() < 0.2) type = 'fast';
+      // Aumenta muito a variabilidade para aparecer mais rápidos e tanques
+      if (difficulty > 2) {
+        tier = random() < 0.4 ? 2 : 1;
+        if (random() < 0.3) type = 'fast';
       }
-      if (difficulty > 12) {
-        tier = random() < 0.2 ? 3 : (random() < 0.4 ? 2 : 1);
-        if (random() < 0.3) type = 'tank';
-        else if (random() < 0.3) type = 'fast';
+      if (difficulty > 6) {
+        tier = random() < 0.3 ? 3 : (random() < 0.5 ? 2 : 1);
+        let r = random();
+        if (r < 0.3) type = 'tank';
+        else if (r < 0.6) type = 'fast';
       }
 
       enemies.push(new Enemy(ex, ey, tier, type));
@@ -896,7 +902,8 @@ function drawPowerupScreen() {
   textAlign(CENTER, CENTER);
   textSize(36);
   fill(255, 255, 100);
-  text("BOSS DERROTADO!", width / 2, 100);
+  let titleText = score === 0 ? "BÔNUS INICIAL!" : "BOSS DERROTADO!";
+  text(titleText, width / 2, 100);
   
   textSize(24);
   fill(200, 200, 200);
@@ -945,13 +952,15 @@ function keyPressed() {
     if (key === '3') { availablePowerups[2].apply(); gameState = 2; }
   } else if (keyCode === ENTER) {
     if (gameState === 0 || gameState === 1) {
-      // Inicia o jogo: reseta todas as variáveis
+      // Inicia o jogo: reseta todas as variáveis e pede o powerup inicial
       resetGame();
-      gameState = 2;
+      setupPowerups();
+      gameState = 4;
     } else if (gameState === 3) {
       // Reinicia após Game Over
       resetGame();
-      gameState = 2;
+      setupPowerups();
+      gameState = 4;
     }
   }
 
