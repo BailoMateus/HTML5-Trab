@@ -26,6 +26,7 @@ let cameraY = 0;           // Deslocamento Y da câmera
 let nextBossScore = 500;
 let bossMessageTimer = 0;
 let availablePowerups = [];
+let nextPowerupScore = 500;  // Pontuação necessária para o próximo powerup
 
 // ============================================================
 // CLASSE PLAYER — Representa o personagem controlado pelo jogador
@@ -557,6 +558,13 @@ function runGame() {
 
   drawHUD(); // Desenha interface (vida, pontuação, tempo)
   
+  // Verifica se o jogador atingiu a pontuação para ganhar um powerup
+  if (score >= nextPowerupScore) {
+    nextPowerupScore += 500; // Próximo powerup em +500 pontos
+    setupPowerups();
+    gameState = 4;
+  }
+  
   // Mensagem do Boss
   if (bossMessageTimer > 0) {
     push();
@@ -693,9 +701,6 @@ function updateProjectiles() {
           spawnDeathParticles(b.x + 20, b.y - 20); // Mais partículas pro Boss
           score += 150 * b.tier; // Mais pontos
           bosses.splice(j, 1);
-          // Prepara a tela de powerups
-          setupPowerups();
-          gameState = 4; 
         }
         if (p.piercing > 0) {
           p.piercing--;
@@ -993,7 +998,7 @@ function keyPressed() {
     if (key === '3') { availablePowerups[2].apply(); gameState = 2; }
   } else if (keyCode === ENTER) {
     if (gameState === 0 || gameState === 1) {
-      // Inicia o jogo: reseta todas as variáveis e pede o powerup inicial
+      // Inicia o jogo: reseta todas as variáveis e oferece powerup inicial
       resetGame();
       setupPowerups();
       gameState = 4;
@@ -1026,4 +1031,5 @@ function resetGame() {
   cameraY = 0;
   nextBossScore = 500;
   bossMessageTimer = 0;
+  nextPowerupScore = 500;  // Reseta o próximo powerup por score
 }
