@@ -41,6 +41,7 @@ class Player {
     this.invincibleTimer = 0;// Frames restantes de invencibilidade após levar dano
     this.baseDamage = 1;     // Dano base dos tiros
     this.fireRate = 25;      // Cooldown dos tiros em frames
+    this.piercing = 0;       // Quantos inimigos o tiro atravessa antes de sumir
   }
 
   // Atualiza posição com base nas teclas pressionadas (WASD ou Setas)
@@ -321,6 +322,8 @@ class Projectile {
     this.speed = 7;
     this.damage = player.baseDamage;
     this.life = 90; // Frames de vida restantes antes de desaparecer
+    this.piercing = player.piercing; // Quantas vezes pode perfurar
+    this.hitTargets = []; // Guarda os alvos já atingidos
     // Calcula direção normalizada para o alvo
     let dx = targetX - x;
     let dy = targetY - y;
@@ -674,14 +677,16 @@ function updateProjectiles() {
       continue;
     }
 
-    let hit = false;
+    let hitDestroyed = false; // Define se o projétil deve ser destruído
     
     // Verifica colisão com bosses primeiro (tamanho maior)
     for (let j = bosses.length - 1; j >= 0; j--) {
       let b = bosses[j];
+      if (p.hitTargets.includes(b)) continue; // Já bateu neste boss
+      
       let d = dist(p.x, p.y, b.x, b.y);
       if (d < (p.size + b.size) / 2) {
-        hit = true;
+        p.hitTargets.push(b);
         let killed = b.takeDamage(p.damage);
         if (killed) {
           spawnDeathParticles(b.x, b.y);
@@ -692,29 +697,41 @@ function updateProjectiles() {
           setupPowerups();
           gameState = 4; 
         }
-        break;
+        if (p.piercing > 0) {
+          p.piercing--;
+        } else {
+          hitDestroyed = true;
+          break; // Para o loop se destruiu
+        }
       }
     }
     
     // Verifica colisão com inimigos normais
-    if (!hit) {
+    if (!hitDestroyed) {
       for (let j = enemies.length - 1; j >= 0; j--) {
         let e = enemies[j];
+        if (p.hitTargets.includes(e)) continue; // Já bateu neste inimigo
+        
         let d = dist(p.x, p.y, e.x, e.y);
         if (d < (p.size + e.size) / 2) {
-          hit = true;
+          p.hitTargets.push(e);
           let killed = e.takeDamage(p.damage);
           if (killed) {
             spawnDeathParticles(e.x, e.y);
             score += 10 * e.tier;
             enemies.splice(j, 1);
           }
-          break; // Um projétil atinge apenas um inimigo
+          if (p.piercing > 0) {
+            p.piercing--;
+          } else {
+            hitDestroyed = true;
+            break; // Para o loop se destruiu
+          }
         }
       }
     }
 
-    if (hit) {
+    if (hitDestroyed) {
       projectiles.splice(i, 1);
     } else {
       p.draw();
@@ -895,7 +912,8 @@ function setupPowerups() {
     { title: "Vida Máxima", desc: "+20 Max HP", apply: () => { player.maxHealth += 20; player.health += 20; } },
     { title: "Velocidade", desc: "+1 Speed", apply: () => { player.speed += 1; } },
     { title: "Mais Dano", desc: "+1 Dano", apply: () => { player.baseDamage += 1; } },
-    { title: "Tiro Rápido", desc: "Reduz recarga", apply: () => { player.fireRate = max(5, player.fireRate - 5); } }
+    { title: "Tiro Rápido", desc: "Reduz recarga", apply: () => { player.fireRate = max(5, player.fireRate - 5); } },
+    { title: "Penetrante", desc: "+1 Alvo atingido", apply: () => { player.piercing += 1; } }
   ];
   
   // Seleciona 3 aleatórios
