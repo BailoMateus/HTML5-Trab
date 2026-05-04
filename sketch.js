@@ -241,7 +241,7 @@ class Boss {
     this.tier = tier || 1;
     this.size = 80 + this.tier * 10;
     this.speed = 0.8 + (this.tier * 0.1);
-    this.maxHealth = 150 + this.tier * 100;
+    this.maxHealth = 100 + this.tier * 50; // Vida inicial reduzida (150 no nível 1)
     this.health = this.maxHealth;
     this.damage = 25 + this.tier * 5;
     this.flashTimer = 0;
@@ -394,7 +394,7 @@ class Particle {
 
 // Função chamada uma vez ao iniciar — configura o canvas
 function setup() {
-  createCanvas(800, 600);
+  createCanvas(1000, 800);
   textFont('monospace');
 }
 
@@ -819,6 +819,29 @@ function drawHUD() {
   textSize(12);
   fill(255, 120, 120);
   text('Inimigos: ' + enemies.length, width - 20, 62);
+  
+  // Barras de vida dos Bosses (se houver ativos)
+  for (let i = 0; i < bosses.length; i++) {
+    let b = bosses[i];
+    let bBarW = width - 300;
+    let bBarH = 16;
+    let bBarX = 150;
+    let bBarY = height - 40 - (i * 22); // Empilha uma em cima da outra
+    
+    noStroke();
+    fill(40, 40, 50);
+    rect(bBarX, bBarY, bBarW, bBarH, 4);
+    
+    let bRatio = b.health / b.maxHealth;
+    fill(255, 150, 50);
+    rect(bBarX, bBarY, bBarW * bRatio, bBarH, 4);
+    
+    fill(255);
+    textSize(12);
+    textAlign(CENTER, CENTER);
+    text('BOSS: ' + Math.ceil(b.health) + ' / ' + b.maxHealth, width / 2, bBarY + bBarH / 2);
+  }
+
   pop();
 }
 
